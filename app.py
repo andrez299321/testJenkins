@@ -6,8 +6,12 @@ app = Flask(__name__)
 def hello():
     if 1==1
         print("hola")
-    if 1==1
-        print("hola")
+        if 1==1
+            print("hola")
+            if 1==1
+                print("hola")
+                if 1==1
+                    print("hola")
     return "Hola mundo desde Flask test push 4!"
 
 if __name__ == "__main__":
