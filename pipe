@@ -1,0 +1,98 @@
+pipeline {
+    agent any
+
+    environment {
+        DEPLOY_HOST     = "192.168.1.60"
+        DEPLOY_PATH     = "/home/deployuser/app"
+        PROJECT_PATH    = "testDocker1"
+        CONTAINER_NAME  = "flask-app"
+        IMAGE_NAME      = "flask-app"
+    }
+
+    stages {
+
+        stage('Clonar repo') {
+            steps {
+                git branch: 'main', url: 'https://github.com/andrez299321/testJenkins.git'
+            }
+        }
+        
+        stage('Enviar código al servidor Docker') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'deployuser', 
+                                                  keyFileVariable: 'SSH_KEY',
+                                                  usernameVariable: 'SSH_USER')]) {
+
+                    sshPut remote: [
+                        name: 'docker-server',
+                        host: "${DEPLOY_HOST}",
+                        user: SSH_USER,
+                        identityFile: SSH_KEY,
+                        allowAnyHosts: true
+                    ],
+                    from: '.',
+                    into: "${DEPLOY_PATH}"
+                }
+            }
+        }
+
+        stage('Validar archivos en servidor Docker') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'deployuser', 
+                                                  keyFileVariable: 'SSH_KEY',
+                                                  usernameVariable: 'SSH_USER')]) {
+
+                    sshCommand remote: [
+                        name: 'docker-server',
+                        host: "${DEPLOY_HOST}",
+                        user: SSH_USER,
+                        identityFile: SSH_KEY,
+                        allowAnyHosts: true
+                    ], command: """
+                        echo '📁 Listado de archivos en ${DEPLOY_PATH}/${PROJECT_PATH}/'
+                        ls -la ${DEPLOY_PATH}/${PROJECT_PATH}/
+
+                        echo '🔍 Validando archivos requeridos...'
+
+                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/Dockerfile || { echo '❌ Falta Dockerfile'; exit 1; }
+                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/app.py || { echo '❌ Falta app.py'; exit 1; }
+                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/requirements.txt || { echo '❌ Falta requirements.txt'; exit 1; }
+
+                        echo '✅ Todos los archivos están presentes.'
+                    """
+                }
+            }
+        }
+
+        stage('Construir y desplegar contenedor') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'deployuser', 
+                                                  keyFileVariable: 'SSH_KEY',
+                                                  usernameVariable: 'SSH_USER')]) {
+
+                    sshCommand remote: [
+                        name: 'docker-server',
+                        host: "${DEPLOY_HOST}",
+                        user: SSH_USER,
+                        identityFile: SSH_KEY,
+                        allowAnyHosts: true
+                    ], command: """
+                        cd ${DEPLOY_PATH}/${PROJECT_PATH}/
+
+                        echo '🛑 Deteniendo contenedor previo...'
+                        docker stop ${CONTAINER_NAME} || true
+
+                        echo '🗑 Eliminando contenedor previo...'
+                        docker rm ${CONTAINER_NAME} || true
+
+                        echo '📦 Construyendo imagen en servidor Docker...'
+                        docker build -t ${IMAGE_NAME} .
+
+                        echo '🚀 Iniciando contenedor...'
+                        docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}
+                    """
+                }
+            }
+        }
+    }
+}
