@@ -4,13 +4,13 @@ app = Flask(__name__)
 
 @app.route("/")
 def hello():
-    if 1==1
+    if 1 == 1:
         print("hola")
-        if 1==1
+        if 1 == 1:
             print("hola")
-            if 1==1
+            if 1 == 1:
                 print("hola")
-                if 1==1
+                if 1 == 1:
                     print("hola")
     return "Hola mundo desde Flask test push 5!"
 
