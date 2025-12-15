@@ -3,20 +3,44 @@ pipeline {
 
     environment {
         DEPLOY_HOST     = "192.168.1.60"
-        DEPLOY_PATH     = "/home/deployuser/app"
-        PROJECT_PATH    = "testDocker1"
-        CONTAINER_NAME  = "flask-app"
-        IMAGE_NAME      = "flask-app"
+        DEPLOY_PATH     = "/home/deployuser/appnet"
+        PROJECT_PATH    = "testnetDocker1"
+        CONTAINER_NAME  = "net-app1"
+        IMAGE_NAME      = "net-app1"
+        SONAR_PROJECT   = "testnetDocker1"
+        SONAR_TOKEN     = credentials('SonarToken')  // Token de SonarQube en Jenkins
     }
 
     stages {
 
+        // Clonar el repositorio
         stage('Clonar repo') {
             steps {
-                git branch: 'main', url: 'https://github.com/andrez299321/testJenkins.git'
+                git branch: 'main', url: 'https://github.com/andrez299321/testJenkinsnet.git'
             }
         }
-        
+
+        // Análisis de código estático con SonarQube
+        stage('Análisis SonarQube') {
+            steps {
+                script {
+                    // Obtener la ruta del SonarScanner desde la configuración global
+                    def scannerHome = tool 'SonarScanner'  
+
+                    // Ejecutar el análisis SonarQube
+                    withSonarQubeEnv('SonarQube') {  
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${SONAR_PROJECT} \
+                            -Dsonar.projectName=${SONAR_PROJECT} \
+                            -Dsonar.sources=. \
+                        """
+                    }
+                }
+            }
+        }
+
+        // Enviar el código al servidor Docker
         stage('Enviar código al servidor Docker') {
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'deployuser', 
@@ -36,6 +60,7 @@ pipeline {
             }
         }
 
+        // Validar los archivos en el servidor Docker
         stage('Validar archivos en servidor Docker') {
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'deployuser', 
@@ -55,8 +80,8 @@ pipeline {
                         echo '🔍 Validando archivos requeridos...'
 
                         test -f ${DEPLOY_PATH}/${PROJECT_PATH}/Dockerfile || { echo '❌ Falta Dockerfile'; exit 1; }
-                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/app.py || { echo '❌ Falta app.py'; exit 1; }
-                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/requirements.txt || { echo '❌ Falta requirements.txt'; exit 1; }
+                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/app.csproj || { echo '❌ Falta app.csproj'; exit 1; }
+                        test -f ${DEPLOY_PATH}/${PROJECT_PATH}/Program.cs || { echo '❌ Falta Program.cs'; exit 1; }
 
                         echo '✅ Todos los archivos están presentes.'
                     """
@@ -64,6 +89,7 @@ pipeline {
             }
         }
 
+        // Construir imagen Docker y desplegar contenedor
         stage('Construir y desplegar contenedor') {
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'deployuser', 
@@ -89,7 +115,7 @@ pipeline {
                         docker build -t ${IMAGE_NAME} .
 
                         echo '🚀 Iniciando contenedor...'
-                        docker run -d --name ${CONTAINER_NAME} -p 5000:5000 ${IMAGE_NAME}
+                        docker run -d --name ${CONTAINER_NAME} -p 8080:80 ${IMAGE_NAME}
                     """
                 }
             }
